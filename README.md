@@ -1,4 +1,6 @@
-# Homework 2: Policy Gradients
+# Homework 2 (from CS 185/285 at UC Berkeley - Deep Reinforcement Learning): Policy Gradients
+
+Homework completed from the UC Berkeley Deep Reinforcement Learning class material available at https://rail.eecs.berkeley.edu/deeprlcourse/ (Spring 2026 version).
 
 ## Setup
 

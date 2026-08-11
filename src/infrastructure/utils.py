@@ -6,6 +6,7 @@ import gym
 import cv2
 from infrastructure import pytorch_util as ptu
 from typing import Dict, Tuple, List
+from numpy.typing import NDArray
 
 ############################################
 ############################################
@@ -13,7 +14,7 @@ from typing import Dict, Tuple, List
 
 def sample_trajectory(
     env: gym.Env, policy: MLPPolicy, max_length: int, render: bool = False
-) -> Dict[str, np.ndarray]:
+) -> Dict[str, NDArray]:
     """Sample a rollout in the environment from a policy."""
     ob = env.reset()
     obs, acs, rewards, next_obs, terminals, image_obs = [], [], [], [], [], []
@@ -69,7 +70,7 @@ def sample_trajectories(
     min_timesteps_per_batch: int,
     max_length: int,
     render: bool = False,
-) -> Tuple[List[Dict[str, np.ndarray]], int]:
+) -> Tuple[List[Dict[str, NDArray]], int]:
     """Collect rollouts using policy until we have collected min_timesteps_per_batch steps."""
     timesteps_this_batch = 0
     trajs = []

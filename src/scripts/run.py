@@ -62,7 +62,7 @@ def run_training_loop(logger, args):
         trajs, envsteps_this_batch = utils.sample_trajectories(
             env=env,
             policy=agent.actor,
-            min_timesteps_per_batch=max_ep_len, #TODO: test; not sure if this is correct
+            min_timesteps_per_batch=max_ep_len,  # TODO: test; not sure if this is correct
             max_length=max_ep_len,
         )
         total_envsteps += envsteps_this_batch
@@ -71,8 +71,21 @@ def run_training_loop(logger, args):
         # this line converts this into a single dictionary of lists of NumPy arrays.
         trajs_dict = {k: [traj[k] for traj in trajs] for k in trajs[0]}
 
-        # TODO: train the agent using the sampled trajectories and the agent's update function
-        train_info: dict = None
+        # {
+        #     "observation": [np.array(obs, dtype=np.float32)],
+        #     "image_obs": np.array(image_obs, dtype=np.uint8),
+        #     "reward": np.array(rewards, dtype=np.float32),
+        #     "action": np.array(acs, dtype=np.float32),
+        #     "next_observation": np.array(next_obs, dtype=np.float32),
+        #     "terminal": np.array(terminals, dtype=np.float32),
+        # }
+
+        train_info = agent.update(
+            obs=trajs_dict["observation"],
+            actions=trajs_dict["action"],
+            rewards=trajs_dict["reward"],
+            terminals=trajs_dict["terminal"],
+        )
 
         if itr % args.scalar_log_freq == 0:
             # save eval metrics

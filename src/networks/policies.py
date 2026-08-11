@@ -7,7 +7,6 @@ from torch import optim
 import numpy as np
 from numpy.typing import NDArray
 import torch
-from torch import distributions
 
 from infrastructure import pytorch_util as ptu
 
@@ -40,7 +39,7 @@ class MLPPolicy(nn.Module):
             ).to(ptu.device)
             parameters = self.net.parameters()
         else:
-            
+
             # neural network with Gaussian/Normal action distribution means as output
             self.net = ptu.build_mlp(
                 input_size=ob_dim,
@@ -48,18 +47,18 @@ class MLPPolicy(nn.Module):
                 n_layers=n_layers,
                 size=layer_size,
             ).to(ptu.device)
-            
+
             # separate parameter for learnable log standard deviations
             # changed default to e to have initialization with unit standard dev
             self.logstd = nn.Parameter(
                 torch.repeat_interleave(
                     input=torch.as_tensor(
-                        data=np.e, 
-                        dtype=torch.float32, 
-                        device=ptu.device), 
-                    repeats=ac_dim)
+                        data=np.e, dtype=torch.float32, device=ptu.device
+                    ),
+                    repeats=ac_dim,
+                )
             )
-            
+
             parameters = itertools.chain([self.logstd], self.net.parameters())
 
         self.optimizer = optim.Adam(
@@ -72,12 +71,19 @@ class MLPPolicy(nn.Module):
     @torch.no_grad()
     def get_action(self, obs: NDArray) -> NDArray:
         """Takes a single observation (as a numpy array) and returns a single action (as a numpy array)."""
-        # TODO: implement get_action
-        action = None
 
-        return action
+        # convert observation to a torch Float32 tensor on device
+        obs_tensor = torch.as_tensor(obs, dtype=torch.float32, device=ptu.device)
 
-    def forward(self, obs: torch.FloatTensor):
+        # get the Distribution output of the network
+        action_distribution: D.Distribution = self.forward(obs=obs_tensor)
+
+        # sample a tensor from the output action distribution
+        action_tensor = action_distribution.sample()
+
+        return action_tensor.numpy(force=True)
+
+    def forward(self, obs: torch.Tensor) -> D.Distribution:
         """
         This function defines the forward pass of the network.  You can return anything you want, but you should be
         able to differentiate through it. For example, you can return a torch.FloatTensor. You can also return more
@@ -108,10 +114,12 @@ class MLPPolicyPG(MLPPolicy):
         actions: NDArray,
         advantages: NDArray,
     ) -> dict:
+        
         """Implements the policy gradient actor update."""
-        obs = ptu.from_numpy(obs)
-        actions = ptu.from_numpy(actions)
-        advantages = ptu.from_numpy(advantages)
+        obs_tensor = torch.from_numpy(obs).float().to(ptu.device)
+        actions_tensor = torch.from_numpy(actions).float().to(ptu.device)
+        advantages_tensor = ptu.from_numpy(advantages).float().to(ptu.device)
+        
 
         # TODO: compute the policy gradient actor loss
         loss = None

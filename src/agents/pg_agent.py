@@ -2,6 +2,8 @@ from typing import Optional, Sequence
 import numpy as np
 from numpy.typing import NDArray
 import torch
+from torch.types import Number
+from typing import Dict
 
 from networks.critics import ValueCritic
 from networks.policies import MLPPolicyPG
@@ -54,7 +56,7 @@ class PGAgent(nn.Module):
         actions: Sequence[NDArray],
         rewards: Sequence[NDArray[np.floating]],
         terminals: Sequence[NDArray],
-    ) -> dict:
+    ) -> Dict[str, Number]:
         """The train step for PG involves updating its actor using the given observations/actions and the calculated
         qvals/advantages that come from the seen rewards.
 
@@ -76,18 +78,19 @@ class PGAgent(nn.Module):
         flat_q_values = np.concatenate(q_values)
 
         # step 2: calculate advantages from Q values
-        advantages: np.ndarray = self._estimate_advantage(
+        advantages = self._estimate_advantage(
             flat_obs, flat_rewards, flat_q_values, flat_terminals
         )
 
         # step 3: use all datapoints (s_t, a_t, adv_t) to update the PG actor/policy
-        # TODO: update the PG actor/policy network once using the advantages
-        info: dict = None
+        info = self.actor.update(
+            obs=flat_obs, actions=flat_actions, advantages=advantages
+        )
 
         # step 4: if needed, use all datapoints (s_t, a_t, q_t) to update the PG critic/baseline
         if self.critic is not None:
-            # TODO: perform `self.baseline_gradient_steps` updates to the critic/baseline network
-            critic_info = None
+            
+            critic_info = self.critic.update(obs=flat_obs, q_values=flat_q_values)
 
             info.update(critic_info)
 
@@ -208,14 +211,14 @@ class PGAgent(nn.Module):
 
                     # otherwise calculate the sum recursively
                     else:
-                        
+
                         # Temporal difference estimate of the advantage
                         advantage_td_estimate = (
                             rewards_tensor[i]
                             + self.gamma * values_tensor[i + 1]
                             - values_tensor[i]
                         )
-                        
+
                         # Recursive application of lambda and gamma
                         advantages_tensor[i] = (
                             advantage_td_estimate

@@ -1,8 +1,9 @@
 import itertools
 from torch import nn
-from torch.nn import functional as F
 import torch.distributions as D
 from torch import optim
+from typing import Dict
+from torch.types import Number
 
 import numpy as np
 from numpy.typing import NDArray
@@ -113,7 +114,7 @@ class MLPPolicyPG(MLPPolicy):
         obs: NDArray,
         actions: NDArray,
         advantages: NDArray,
-    ) -> dict:
+    ) -> Dict[str, Number]:
         """Implements the policy gradient actor update."""
         obs_tensor = torch.from_numpy(obs).float().to(ptu.device)
         actions_tensor = torch.from_numpy(actions).float().to(ptu.device)

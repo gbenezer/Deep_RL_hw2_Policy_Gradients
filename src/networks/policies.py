@@ -50,14 +50,8 @@ class MLPPolicy(nn.Module):
             ).to(ptu.device)
 
             # separate parameter for learnable log standard deviations
-            # changed default to e to have initialization with unit standard dev
             self.logstd = nn.Parameter(
-                torch.repeat_interleave(
-                    input=torch.as_tensor(
-                        data=np.e, dtype=torch.float32, device=ptu.device
-                    ),
-                    repeats=ac_dim,
-                )
+                torch.zeros(size=(ac_dim,), dtype=torch.float32, device=ptu.device)
             )
 
             parameters = itertools.chain([self.logstd], self.net.parameters())
@@ -117,7 +111,7 @@ class MLPPolicyPG(MLPPolicy):
     ) -> Dict[str, Number]:
         """Implements the policy gradient actor update."""
         obs_tensor = torch.from_numpy(obs).float().to(ptu.device)
-        actions_tensor = torch.from_numpy(actions).float().to(ptu.device)
+        actions_tensor = torch.from_numpy(actions).to(ptu.device)
         advantages_tensor = torch.from_numpy(advantages).float().to(ptu.device)
 
         # first get the actor action policy distribution
@@ -128,12 +122,19 @@ class MLPPolicyPG(MLPPolicy):
         negative_log_prob_actions = -1.0 * observation_action_distribution.log_prob(
             value=actions_tensor
         )
+        
+        # if the action space is not discrete, sum the pdf
+        # across all dimensions of the action space
+        if not self.discrete:
+            negative_log_prob_actions = negative_log_prob_actions.sum(dim=-1)
 
         # the loss is the mean of the negative log probabilities weighted by the advantages
         loss = torch.mean(advantages_tensor * negative_log_prob_actions)
 
         # perform an optimizer step
+        self.optimizer.zero_grad()
         loss.backward()
+        self.optimizer.step()
 
         return {
             "Actor Loss": loss.item(),

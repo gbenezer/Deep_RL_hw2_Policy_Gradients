@@ -114,18 +114,25 @@ class MLPPolicyPG(MLPPolicy):
         actions: NDArray,
         advantages: NDArray,
     ) -> dict:
-        
         """Implements the policy gradient actor update."""
         obs_tensor = torch.from_numpy(obs).float().to(ptu.device)
         actions_tensor = torch.from_numpy(actions).float().to(ptu.device)
-        advantages_tensor = ptu.from_numpy(advantages).float().to(ptu.device)
-        
+        advantages_tensor = torch.from_numpy(advantages).float().to(ptu.device)
 
-        # TODO: compute the policy gradient actor loss
-        loss = None
+        # first get the actor action policy distribution
+        observation_action_distribution = self.forward(obs=obs_tensor)
 
-        # TODO: perform an optimizer step
-        pass
+        # then get the negative log probability mass / density of the executed actions
+        # under the observation action distribution (positive number)
+        negative_log_prob_actions = -1.0 * observation_action_distribution.log_prob(
+            value=actions_tensor
+        )
+
+        # the loss is the sum of the negative log probabilities weighted by the advantages
+        loss = torch.sum(advantages_tensor * negative_log_prob_actions)
+
+        # perform an optimizer step
+        loss.backward()
 
         return {
             "Actor Loss": loss.item(),

@@ -22,22 +22,23 @@ def sample_trajectory(
         # render an image
         if render:
             if hasattr(env, "sim"):
-                img = env.sim.render(camera_name="track", height=500, width=500)[::-1]
+                img: cv2.typing.MatLike = env.sim.render(
+                    camera_name="track", height=500, width=500
+                )[::-1]
             else:
-                img = env.render(mode="single_rgb_array")
+                img: cv2.typing.MatLike = env.render(mode="single_rgb_array")
+
+            interp = cv2.INTER_CUBIC
             image_obs.append(
-                cv2.resize(img, dsize=(250, 250), interpolation=cv2.INTER_CUBIC)
+                cv2.resize(src=img, dsize=(250, 250), interpolation=interp)
             )
 
-        # TODO use the most recent ob to decide what to do
-        ac = None
+        ac = policy.get_action(obs=ob)
 
-        # TODO: take that action and get reward and next ob
-        next_ob, rew, done, info = None, None, None, None
+        next_ob, rew, done, trunc, info = env.step(action=ac)
 
-        # TODO rollout can end due to done, or due to max_length
         steps += 1
-        rollout_done = None
+        rollout_done = done or steps >= max_length
 
         # record result of taking that action
         obs.append(ob)

@@ -1,5 +1,6 @@
 import itertools
 from torch import nn
+from torch.nn import functional as F
 from torch import optim
 from torch.types import Number
 from typing import Dict
@@ -48,7 +49,9 @@ class ValueCritic(nn.Module):
         
         loss = F.smooth_l1_loss(input=critic_value_tensor, target=q_values_tensor)
 
+        self.optimizer.zero_grad()
         loss.backward()
+        self.optimizer.step()
 
         return {
             "Baseline Loss": loss.item(),

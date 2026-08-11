@@ -1,5 +1,6 @@
 from typing import Optional, Sequence
 import numpy as np
+from numpy.typing import NDArray
 import torch
 
 from networks.critics import ValueCritic
@@ -49,10 +50,10 @@ class PGAgent(nn.Module):
 
     def update(
         self,
-        obs: Sequence[np.ndarray],
-        actions: Sequence[np.ndarray],
-        rewards: Sequence[np.ndarray],
-        terminals: Sequence[np.ndarray],
+        obs: Sequence[NDArray],
+        actions: Sequence[NDArray],
+        rewards: Sequence[NDArray[np.floating]],
+        terminals: Sequence[NDArray],
     ) -> dict:
         """The train step for PG involves updating its actor using the given observations/actions and the calculated
         qvals/advantages that come from the seen rewards.
@@ -62,15 +63,21 @@ class PGAgent(nn.Module):
         """
 
         # step 1: calculate Q values of each (s_t, a_t) point, using rewards (r_0, ..., r_t, ..., r_T)
-        q_values: Sequence[np.ndarray] = self._calculate_q_vals(rewards)
+        q_values: Sequence[NDArray[np.floating]] = self._calculate_q_vals(rewards)
 
         # TODO: flatten the lists of arrays into single arrays, so that the rest of the code can be written in a vectorized
         # way. obs, actions, rewards, terminals, and q_values should all be arrays with a leading dimension of `batch_size`
         # beyond this point.
 
+        flat_obs = np.concatenate(obs)
+        flat_actions = np.concatenate(actions)
+        flat_rewards = np.concatenate(rewards)
+        flat_terminals = np.concatenate(terminals)
+        flat_q_values = np.concatenate(q_values)
+
         # step 2: calculate advantages from Q values
         advantages: np.ndarray = self._estimate_advantage(
-            obs, rewards, q_values, terminals
+            flat_obs, flat_rewards, flat_q_values, flat_terminals
         )
 
         # step 3: use all datapoints (s_t, a_t, adv_t) to update the PG actor/policy
@@ -86,47 +93,84 @@ class PGAgent(nn.Module):
 
         return info
 
-    def _discounted_return(self, rewards: Sequence[float]) -> Sequence[float]:
+    def _discounted_return(self, rewards: NDArray[np.floating]) -> NDArray[np.floating]:
         """
-        Helper function which takes a list of rewards {r_0, r_1, ..., r_t', ... r_T} and returns
-        a list where each index t contains sum_{t'=0}^T gamma^t' r_{t'}
+        Helper function which takes a numpy array of floats of rewards {r_0, r_1, ..., r_t', ... r_T} and returns
+        a numpy array of floats where each index t contains sum_{t'=0}^T gamma^t' r_{t'}
 
         Note that all entries of the output list should be the exact same because each sum is from 0 to T (and doesn't
         involve t)!
         """
-        return None
 
-    def _discounted_reward_to_go(self, rewards: Sequence[float]) -> Sequence[float]:
-        """
-        Helper function which takes a list of rewards {r_0, r_1, ..., r_t', ... r_T} and returns a list where the entry
-        in each index t is sum_{t'=t}^T gamma^(t'-t) * r_{t'}.
-        """
-        return None
+        # get the time horizon
+        horizon = len(rewards)
 
-    def _calculate_q_vals(self, rewards: Sequence[np.ndarray]) -> Sequence[np.ndarray]:
+        # early exit for short trajectories
+        if horizon < 2:
+            return rewards
+
+        # create the discounting exponents
+        exponents = np.arange(horizon)
+
+        # sum the discounted rewards from beginning to end
+        discounted_reward_sum = np.sum(np.power(rewards, exponents))
+
+        return np.repeat(discounted_reward_sum, repeats=horizon)
+
+    def _discounted_reward_to_go(
+        self, rewards: NDArray[np.floating]
+    ) -> NDArray[np.floating]:
+        """
+        Helper function which takes a numpy array of floats of rewards {r_0, r_1, ..., r_t', ... r_T}
+        and returns a numpy array of floats where the entry in each index t is sum_{t'=t}^T gamma^(t'-t) * r_{t'}.
+        """
+
+        # if there is zero or one rewards,
+        # return the rewards unchanged
+        if len(rewards) < 2:
+            return rewards
+
+        reward_to_go = rewards.copy()
+
+        # from the penultimate entry of the rewards list, iterating backwards
+        # calculate reward to go by iteratively discounting reward to go
+        for t in range(len(rewards) - 2, -1, -1):
+            reward_to_go[t] = rewards[t + 1] + self.gamma * reward_to_go[t + 1]
+
+        return reward_to_go
+
+    def _calculate_q_vals(
+        self, rewards: Sequence[NDArray[np.floating]]
+    ) -> Sequence[NDArray[np.floating]]:
         """Monte Carlo estimation of the Q function."""
 
         if not self.use_reward_to_go:
             # Case 1: in trajectory-based PG, we ignore the timestep and instead use the discounted return for the entire
             # trajectory at each point.
             # In other words: Q(s_t, a_t) = sum_{t'=0}^T gamma^t' r_{t'}
-            # TODO: use the helper function self._discounted_return to calculate the Q-values
-            q_values = None
+
+            q_values = [
+                self._discounted_return(reward_trajectory)
+                for reward_trajectory in rewards
+            ]
         else:
             # Case 2: in reward-to-go PG, we only use the rewards after timestep t to estimate the Q-value for (s_t, a_t).
             # In other words: Q(s_t, a_t) = sum_{t'=t}^T gamma^(t'-t) * r_{t'}
-            # TODO: use the helper function self._discounted_reward_to_go to calculate the Q-values
-            q_values = None
+
+            q_values = [
+                self._discounted_reward_to_go(reward_trajectory)
+                for reward_trajectory in rewards
+            ]
 
         return q_values
 
     def _estimate_advantage(
         self,
-        obs: np.ndarray,
-        rewards: np.ndarray,
-        q_values: np.ndarray,
-        terminals: np.ndarray,
-    ) -> np.ndarray:
+        obs: NDArray,
+        rewards: NDArray[np.floating],
+        q_values: NDArray,
+        terminals: NDArray,
+    ) -> NDArray:
         """Computes advantages by (possibly) subtracting a value baseline from the estimated Q-values.
 
         Operates on flat 1D NumPy arrays.

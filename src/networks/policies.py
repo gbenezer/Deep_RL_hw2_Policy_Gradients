@@ -123,13 +123,13 @@ class MLPPolicyPG(MLPPolicy):
         observation_action_distribution = self.forward(obs=obs_tensor)
 
         # then get the negative log probability mass / density of the executed actions
-        # under the observation action distribution (positive number)
+        # under the observation action distribution (all positive numbers)
         negative_log_prob_actions = -1.0 * observation_action_distribution.log_prob(
             value=actions_tensor
         )
 
-        # the loss is the sum of the negative log probabilities weighted by the advantages
-        loss = torch.sum(advantages_tensor * negative_log_prob_actions)
+        # the loss is the mean of the negative log probabilities weighted by the advantages
+        loss = torch.mean(advantages_tensor * negative_log_prob_actions)
 
         # perform an optimizer step
         loss.backward()

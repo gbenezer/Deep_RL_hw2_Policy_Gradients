@@ -34,7 +34,7 @@ class PGAgent(nn.Module):
         )
 
         # create the critic (baseline) network, if needed
-        if use_baseline:
+        if use_baseline and baseline_learning_rate is not None:
             self.critic = ValueCritic(
                 ob_dim, n_layers, layer_size, baseline_learning_rate
             )
@@ -65,7 +65,7 @@ class PGAgent(nn.Module):
         # step 1: calculate Q values of each (s_t, a_t) point, using rewards (r_0, ..., r_t, ..., r_T)
         q_values: Sequence[NDArray[np.floating]] = self._calculate_q_vals(rewards)
 
-        # TODO: flatten the lists of arrays into single arrays, so that the rest of the code can be written in a vectorized
+        # flatten the lists of arrays into single arrays, so that the rest of the code can be written in a vectorized
         # way. obs, actions, rewards, terminals, and q_values should all be arrays with a leading dimension of `batch_size`
         # beyond this point.
 
@@ -176,35 +176,57 @@ class PGAgent(nn.Module):
         Operates on flat 1D NumPy arrays.
         """
         if self.critic is None:
-            # TODO: if no baseline, then what are the advantages?
-            advantages = None
+            advantages = q_values
+            advantages_tensor = None
         else:
-            # TODO: run the critic and use it as a baseline
-            values = None
-            assert values.shape == q_values.shape
+
+            # convert ndarrays to torch tensors on-device
+            obs_tensor = torch.from_numpy(obs).float().to(device=ptu.device)
+            rewards_tensor = torch.from_numpy(rewards).float().to(device=ptu.device)
+            q_values_tensor = torch.from_numpy(q_values).float().to(device=ptu.device)
+            terminals_tensor = torch.from_numpy(terminals).float().to(device=ptu.device)
+
+            values_tensor = self.critic.forward(obs=obs_tensor)
+            assert values_tensor.size() == q_values_tensor.size()
 
             if self.gae_lambda is None:
-                # TODO: if using a baseline, but not GAE, what are the advantages?
-                advantages = None
+
+                advantages_tensor = q_values_tensor - values_tensor
+                advantages = advantages_tensor.numpy(force=True)
             else:
-                # TODO: implement GAE
-                batch_size = obs.shape[0]
+                batch_size = obs_tensor.size()[0]
 
                 # HINT: append a dummy T+1 value for simpler recursive calculation
-                values = np.append(values, [0])
-                advantages = np.zeros(batch_size + 1)
+                values_tensor = torch.concatenate((values_tensor, torch.zeros(1)))
+                advantages_tensor = torch.zeros(batch_size + 1)
 
                 for i in reversed(range(batch_size)):
-                    # TODO: recursively compute advantage estimates starting from timestep T.
-                    # HINT: use terminals to handle edge cases. terminals[i] is 1 if the state is the last in its
-                    # trajectory, and 0 otherwise.
-                    pass
+
+                    # if the state is terminal, the advantage is defined to be zero
+                    if terminals_tensor[i] == 1:
+                        continue
+
+                    # otherwise calculate the sum recursively
+                    else:
+                        
+                        # Temporal difference estimate of the advantage
+                        advantage_td_estimate = (
+                            rewards_tensor[i]
+                            + self.gamma * values_tensor[i + 1]
+                            - values_tensor[i]
+                        )
+                        
+                        # Recursive application of lambda and gamma
+                        advantages_tensor[i] = (
+                            advantage_td_estimate
+                            + self.gamma * self.gae_lambda * advantages_tensor[i + 1]
+                        )
 
                 # remove dummy advantage
-                advantages = advantages[:-1]
+                advantages_tensor = advantages_tensor[:-1]
+                advantages = advantages_tensor.numpy(force=True)
 
-        # TODO: normalize the advantages to have a mean of zero and a standard deviation of one within the batch
-        if self.normalize_advantages:
-            pass
+        if self.normalize_advantages and advantages is not None:
+            advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-12)
 
         return advantages

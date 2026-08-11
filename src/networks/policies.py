@@ -5,6 +5,7 @@ import torch.distributions as D
 from torch import optim
 
 import numpy as np
+from numpy.typing import NDArray
 import torch
 from torch import distributions
 
@@ -30,24 +31,36 @@ class MLPPolicy(nn.Module):
         super().__init__()
 
         if discrete:
-            self.logits_net = ptu.build_mlp(
+            # neural network with raw logits as output
+            self.net = ptu.build_mlp(
                 input_size=ob_dim,
                 output_size=ac_dim,
                 n_layers=n_layers,
                 size=layer_size,
             ).to(ptu.device)
-            parameters = self.logits_net.parameters()
+            parameters = self.net.parameters()
         else:
-            self.mean_net = ptu.build_mlp(
+            
+            # neural network with Gaussian/Normal action distribution means as output
+            self.net = ptu.build_mlp(
                 input_size=ob_dim,
                 output_size=ac_dim,
                 n_layers=n_layers,
                 size=layer_size,
             ).to(ptu.device)
+            
+            # separate parameter for learnable log standard deviations
+            # changed default to e to have initialization with unit standard dev
             self.logstd = nn.Parameter(
-                torch.zeros(ac_dim, dtype=torch.float32, device=ptu.device)
+                torch.repeat_interleave(
+                    input=torch.as_tensor(
+                        data=np.e, 
+                        dtype=torch.float32, 
+                        device=ptu.device), 
+                    repeats=ac_dim)
             )
-            parameters = itertools.chain([self.logstd], self.mean_net.parameters())
+            
+            parameters = itertools.chain([self.logstd], self.net.parameters())
 
         self.optimizer = optim.Adam(
             parameters,
@@ -57,7 +70,7 @@ class MLPPolicy(nn.Module):
         self.discrete = discrete
 
     @torch.no_grad()
-    def get_action(self, obs: np.ndarray) -> np.ndarray:
+    def get_action(self, obs: NDArray) -> NDArray:
         """Takes a single observation (as a numpy array) and returns a single action (as a numpy array)."""
         # TODO: implement get_action
         action = None
@@ -71,13 +84,14 @@ class MLPPolicy(nn.Module):
         flexible objects, such as a `torch.distributions.Distribution` object. It's up to you!
         """
         if self.discrete:
-            # TODO: define the forward pass for a policy with a discrete action space.
-            pass
+            action_logits: torch.Tensor = self.net(obs)
+            return D.Categorical(logits=action_logits)
         else:
-            # TODO: define the forward pass for a policy with a continuous action space.
-            pass
+            action_means: torch.Tensor = self.net(obs)
+            action_stdev = torch.exp(self.logstd)
+            return D.Normal(loc=action_means, scale=action_stdev)
 
-    def update(self, obs: np.ndarray, actions: np.ndarray, *args, **kwargs) -> dict:
+    def update(self, obs: NDArray, actions: NDArray, *args, **kwargs) -> dict:
         """
         Performs one iteration of gradient descent on the provided batch of data. You don't need to implement this
         method in the base class, but you do need to implement it in the subclass.
@@ -90,9 +104,9 @@ class MLPPolicyPG(MLPPolicy):
 
     def update(
         self,
-        obs: np.ndarray,
-        actions: np.ndarray,
-        advantages: np.ndarray,
+        obs: NDArray,
+        actions: NDArray,
+        advantages: NDArray,
     ) -> dict:
         """Implements the policy gradient actor update."""
         obs = ptu.from_numpy(obs)

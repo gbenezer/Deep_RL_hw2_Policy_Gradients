@@ -9,9 +9,9 @@ import absl.flags as flags
 import ml_collections
 import numpy as np
 import torch
-from torch import nn
 import wandb
 from PIL import Image, ImageEnhance
+from torch import nn
 
 
 class Logger:
@@ -25,24 +25,38 @@ class Logger:
         self.rows = []
 
     def log(self, row, step):
-        row['step'] = step
+        row["step"] = step
         if self.file is None:
-            self.file = open(self.path, 'w')
+            self.file = open(self.path, "w")
             if self.header is None:
-                self.header = [k for k, v in row.items() if not isinstance(v, self.disallowed_types)]
-                self.file.write(','.join(self.header) + '\n')
-            filtered_row = {k: v for k, v in row.items() if not isinstance(v, self.disallowed_types)}
-            self.file.write(','.join([str(filtered_row.get(k, '')) for k in self.header]) + '\n')
+                self.header = [
+                    k
+                    for k, v in row.items()
+                    if not isinstance(v, self.disallowed_types)
+                ]
+                self.file.write(",".join(self.header) + "\n")
+            filtered_row = {
+                k: v for k, v in row.items() if not isinstance(v, self.disallowed_types)
+            }
+            self.file.write(
+                ",".join([str(filtered_row.get(k, "")) for k in self.header]) + "\n"
+            )
         else:
-            filtered_row = {k: v for k, v in row.items() if not isinstance(v, self.disallowed_types)}
-            self.file.write(','.join([str(filtered_row.get(k, '')) for k in self.header]) + '\n')
+            filtered_row = {
+                k: v for k, v in row.items() if not isinstance(v, self.disallowed_types)
+            }
+            self.file.write(
+                ",".join([str(filtered_row.get(k, "")) for k in self.header]) + "\n"
+            )
         self.file.flush()
 
         wandb.log(row, step=step)
         self.rows.append(copy.deepcopy(row))
 
-    def log_trajs_as_videos(self, trajs, step, max_videos_to_save=2, fps=10, video_title='video'):
-        videos = [traj['image_obs'] for traj in trajs][:max_videos_to_save]
+    def log_trajs_as_videos(
+        self, trajs, step, max_videos_to_save=2, fps=10, video_title="video"
+    ):
+        videos = [traj["image_obs"] for traj in trajs][:max_videos_to_save]
         video = get_wandb_video(videos, fps=fps)
         wandb.log({video_title: video}, step=step)
 
@@ -53,11 +67,7 @@ class Logger:
 
 def remove_functions(obj):
     if isinstance(obj, dict):
-        return {
-            k: remove_functions(v)
-            for k, v in obj.items()
-            if not callable(v)
-        }
+        return {k: remove_functions(v) for k, v in obj.items() if not callable(v)}
     elif isinstance(obj, list):
         return [remove_functions(v) for v in obj if not callable(v)]
     elif callable(obj):
@@ -68,29 +78,29 @@ def remove_functions(obj):
 
 def dump_log(agent: nn.Module, logger: Logger, args, save_dir: str):
     """Dump the log to a pkl file."""
-    cur_time = datetime.now().strftime('%Y%m%d_%H%M%S')
+    cur_time = datetime.now().strftime("%Y%m%d_%H%M%S")
     config = vars(args)
     config = remove_functions(config)
 
     data = {
-        'log': logger.rows,
-        'log_hash': hash(json.dumps(str(logger.rows), sort_keys=True)),
-        'config': config,
-        'config_hash': hash(json.dumps(str(config), sort_keys=True)),
-        'time': cur_time,
+        "log": logger.rows,
+        "log_hash": hash(json.dumps(str(logger.rows), sort_keys=True)),
+        "config": config,
+        "config_hash": hash(json.dumps(str(config), sort_keys=True)),
+        "time": cur_time,
     }
 
-    with open(os.path.join(save_dir, 'flags.json'), 'w') as f:
+    with open(os.path.join(save_dir, "flags.json"), "w") as f:
         json.dump(config, f)
-    with open(os.path.join(save_dir, f'log.pkl'), 'wb') as f:
+    with open(os.path.join(save_dir, f"log.pkl"), "wb") as f:
         pickle.dump(data, f)
 
-    torch.save(agent.state_dict(), os.path.join(save_dir, 'agent.pt'))
+    torch.save(agent.state_dict(), os.path.join(save_dir, "agent.pt"))
 
 
 def get_flag_dict():
     """Return the dictionary of flags."""
-    flag_dict = {k: getattr(flags.FLAGS, k) for k in flags.FLAGS if '.' not in k}
+    flag_dict = {k: getattr(flags.FLAGS, k) for k in flags.FLAGS if "." not in k}
     for k in flag_dict:
         if isinstance(flag_dict[k], ml_collections.ConfigDict):
             flag_dict[k] = flag_dict[k].to_dict()
@@ -99,10 +109,10 @@ def get_flag_dict():
 
 def setup_wandb(
     entity=None,
-    project='project',
+    project="project",
     group=None,
     name=None,
-    mode='online',
+    mode="online",
     config=None,
 ):
     """Set up Weights & Biases for logging."""
@@ -118,7 +128,7 @@ def setup_wandb(
         dir=wandb_output_dir,
         name=name,
         settings=wandb.Settings(
-            start_method='thread',
+            start_method="thread",
             _disable_stats=False,
         ),
         mode=mode,
@@ -177,9 +187,14 @@ def get_wandb_video(renders=None, n_cols=None, fps=15):
         renders[i] = np.concatenate([render, pad], axis=0)
 
         # Add borders.
-        renders[i] = np.pad(renders[i], ((0, 0), (1, 1), (1, 1), (0, 0)), mode='constant', constant_values=0)
+        renders[i] = np.pad(
+            renders[i],
+            ((0, 0), (1, 1), (1, 1), (0, 0)),
+            mode="constant",
+            constant_values=0,
+        )
     renders = np.array(renders)  # (n, t, h, w, c)
 
     renders = reshape_video(renders, n_cols)  # (t, c, nr * h, nc * w)
 
-    return wandb.Video(renders, fps=fps, format='mp4')
+    return wandb.Video(renders, fps=fps, format="mp4")

@@ -1,12 +1,14 @@
-from collections import OrderedDict
-import numpy as np
 import copy
-from networks.policies import MLPPolicy
-import gym
+from collections import OrderedDict
+from typing import Dict, List, Tuple
+
 import cv2
-from infrastructure import pytorch_util as ptu
-from typing import Dict, Tuple, List
+import gym
+import numpy as np
 from numpy.typing import NDArray
+
+from infrastructure import pytorch_util as ptu
+from networks.policies import MLPPolicy
 
 ############################################
 ############################################

@@ -25,3 +25,9 @@ package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[dependency-groups]
+dev = [
+    "isort>=8.0.1",
+    "ruff>=0.16.2",
+]

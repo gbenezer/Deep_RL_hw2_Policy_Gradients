@@ -38,8 +38,8 @@ class ValueCritic(nn.Module):
 
     def update(self, obs: NDArray, q_values: NDArray) -> Dict[str, Number]:
 
-        obs_tensor = torch.from_numpy(obs).float().to(ptu.device)
-        q_values_tensor = torch.from_numpy(q_values).float().to(ptu.device)
+        obs_tensor = torch.from_numpy(obs).to(ptu.device)
+        q_values_tensor = torch.from_numpy(q_values).to(ptu.device)
 
         critic_value_tensor = self.network(obs_tensor).squeeze(-1)
 

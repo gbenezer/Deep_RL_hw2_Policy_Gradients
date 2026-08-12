@@ -107,9 +107,9 @@ class MLPPolicyPG(MLPPolicy):
         advantages: NDArray,
     ) -> Dict[str, Number]:
         """Implements the policy gradient actor update."""
-        obs_tensor = torch.from_numpy(obs).float().to(ptu.device)
-        actions_tensor = torch.from_numpy(actions).long().to(ptu.device)
-        advantages_tensor = torch.from_numpy(advantages).float().to(ptu.device)
+        obs_tensor = torch.from_numpy(obs).to(ptu.device)
+        actions_tensor = torch.from_numpy(actions).to(ptu.device)
+        advantages_tensor = torch.from_numpy(advantages).to(ptu.device)
 
         # first get the actor action policy distribution
         observation_action_distribution = self(obs_tensor)

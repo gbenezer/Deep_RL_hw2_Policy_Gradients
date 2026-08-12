@@ -1,14 +1,10 @@
-import itertools
-from torch import nn
-from torch.nn import functional as F
-from torch import optim
-from torch.types import Number
 from typing import Dict
 
-import numpy as np
-from numpy.typing import NDArray
 import torch
-from torch import distributions
+from numpy.typing import NDArray
+from torch import nn, optim
+from torch.nn import functional as F
+from torch.types import Number
 
 from infrastructure import pytorch_util as ptu
 
@@ -38,15 +34,15 @@ class ValueCritic(nn.Module):
         )
 
     def forward(self, obs: torch.Tensor) -> torch.Tensor:
-        return self.network(obs)
+        return self.network(obs).squeeze(-1)
 
     def update(self, obs: NDArray, q_values: NDArray) -> Dict[str, Number]:
-        
+
         obs_tensor = torch.from_numpy(obs).float().to(ptu.device)
         q_values_tensor = torch.from_numpy(q_values).float().to(ptu.device)
-        
-        critic_value_tensor = self.network.forward(input=obs_tensor)
-        
+
+        critic_value_tensor = self.network(obs_tensor).squeeze(-1)
+
         loss = F.smooth_l1_loss(input=critic_value_tensor, target=q_values_tensor)
 
         self.optimizer.zero_grad()

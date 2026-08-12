@@ -1,7 +1,7 @@
 import argparse
 import os
-from datetime import datetime
 import time
+from datetime import datetime
 
 import gym
 import numpy as np
@@ -9,17 +9,20 @@ import torch
 import tqdm
 
 from agents.pg_agent import PGAgent
-from infrastructure import utils
 from infrastructure import pytorch_util as ptu
-from infrastructure.log_utils import setup_wandb, Logger, dump_log
+from infrastructure import utils
+from infrastructure.log_utils import Logger, dump_log, setup_wandb
 
 MAX_NVIDEO = 2
 
 
 def run_training_loop(logger, args):
-    # set random seeds
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
+    
+    # set random seeds if needed
+    if args.seed is not None:
+        np.random.seed(args.seed)
+        torch.manual_seed(args.seed)
+    
     ptu.init_gpu(use_gpu=not args.no_gpu, gpu_id=args.which_gpu)
 
     # make the gym environment
@@ -154,7 +157,7 @@ def setup_arguments(args=None):
     parser.add_argument(
         "--ep_len", type=int
     )  # students shouldn't change this away from env's default
-    parser.add_argument("--seed", type=int, default=1)
+    parser.add_argument("--seed", type=int) # removed default value of 1
     parser.add_argument("--no_gpu", "-ngpu", action="store_true")
     parser.add_argument("--which_gpu", "-gpu_id", default=0)
     parser.add_argument("--video_log_freq", type=int, default=-1)

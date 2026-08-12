@@ -65,7 +65,7 @@ def run_training_loop(logger, args):
         trajs, envsteps_this_batch = utils.sample_trajectories(
             env=env,
             policy=agent.actor,
-            min_timesteps_per_batch=max_ep_len,  # TODO: test; not sure if this is correct
+            min_timesteps_per_batch=args.batch_size,
             max_length=max_ep_len,
         )
         total_envsteps += envsteps_this_batch
@@ -132,6 +132,7 @@ def run_training_loop(logger, args):
 
 def setup_arguments(args=None):
     parser = argparse.ArgumentParser()
+    parser.add_argument("--project_name", type=str, default="deep_rl_hw_2-policy-gradients")
     parser.add_argument("--env_name", type=str, default="CartPole-v0")
     parser.add_argument("--exp_name", type=str, default="exp")
     parser.add_argument("--n_iter", "-n", type=int, default=200)
@@ -175,7 +176,7 @@ def main(args):
     exp_name = f"{args.env_name}_{args.exp_name}_sd{args.seed}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
     config = vars(args)
-    setup_wandb(project="deep_rl_hw_2-policy-gradients", name=exp_name, config=config)
+    setup_wandb(project=args.project_name, name=exp_name, config=config)
     args.save_dir = os.path.join(logdir_prefix, exp_name)
     os.makedirs(args.save_dir, exist_ok=True)
     logger = Logger(os.path.join(args.save_dir, "log.csv"))

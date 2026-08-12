@@ -1,14 +1,14 @@
-from typing import Optional, Sequence
-import numpy as np
-from numpy.typing import NDArray
-import torch
-from torch.types import Number
-from typing import Dict
+from typing import Dict, Optional, Sequence
 
+import numpy as np
+import torch
+from numpy.typing import NDArray
+from torch import nn
+from torch.types import Number
+
+from infrastructure import pytorch_util as ptu
 from networks.critics import ValueCritic
 from networks.policies import MLPPolicyPG
-from infrastructure import pytorch_util as ptu
-from torch import nn
 
 
 class PGAgent(nn.Module):
@@ -89,10 +89,17 @@ class PGAgent(nn.Module):
 
         # step 4: if needed, use all datapoints (s_t, a_t, q_t) to update the PG critic/baseline
         if self.critic is not None:
-            
             critic_info = self.critic.update(obs=flat_obs, q_values=flat_q_values)
 
             info.update(critic_info)
+
+            # do more than one update if specified
+            if self.baseline_gradient_steps is not None:
+                for _ in range(self.baseline_gradient_steps - 1):
+                    critic_info = self.critic.update(
+                        obs=flat_obs, q_values=flat_q_values
+                    )
+                    info.update(critic_info)
 
         return info
 
@@ -115,8 +122,11 @@ class PGAgent(nn.Module):
         # create the discounting exponents
         exponents = np.arange(horizon)
 
+        # create the discount factors
+        discounts = np.power(self.gamma, exponents)
+
         # sum the discounted rewards from beginning to end
-        discounted_reward_sum = np.sum(np.power(rewards, exponents))
+        discounted_reward_sum = np.sum(np.multiply(rewards, discounts))
 
         return np.repeat(discounted_reward_sum, repeats=horizon)
 
@@ -138,7 +148,7 @@ class PGAgent(nn.Module):
         # from the penultimate entry of the rewards list, iterating backwards
         # calculate reward to go by iteratively discounting reward to go
         for t in range(len(rewards) - 2, -1, -1):
-            reward_to_go[t] = rewards[t + 1] + self.gamma * reward_to_go[t + 1]
+            reward_to_go[t] = rewards[t] + self.gamma * reward_to_go[t + 1]
 
         return reward_to_go
 
@@ -182,7 +192,6 @@ class PGAgent(nn.Module):
             advantages = q_values
             advantages_tensor = None
         else:
-
             # convert ndarrays to torch tensors on-device
             obs_tensor = torch.from_numpy(obs).float().to(device=ptu.device)
             rewards_tensor = torch.from_numpy(rewards).float().to(device=ptu.device)
@@ -193,37 +202,40 @@ class PGAgent(nn.Module):
             assert values_tensor.size() == q_values_tensor.size()
 
             if self.gae_lambda is None:
-
                 advantages_tensor = q_values_tensor - values_tensor
                 advantages = advantages_tensor.numpy(force=True)
             else:
                 batch_size = obs_tensor.size()[0]
 
                 # HINT: append a dummy T+1 value for simpler recursive calculation
-                values_tensor = torch.concatenate((values_tensor, torch.zeros(1)))
-                advantages_tensor = torch.zeros(batch_size + 1)
+                values_tensor = torch.concatenate(
+                    (values_tensor, torch.zeros(1, device=values_tensor.device))
+                ).to(device=values_tensor.device)
+                
+                advantages_tensor = torch.zeros(batch_size + 1).to(
+                    device=obs_tensor.device
+                )
 
                 for i in reversed(range(batch_size)):
-
-                    # if the state is terminal, the advantage is defined to be zero
+                    # if the state is terminal, the next
+                    # advantage and value are defined to be zero
                     if terminals_tensor[i] == 1:
-                        continue
-
-                    # otherwise calculate the sum recursively
+                        next_value = 0.0
+                        next_advantage = 0.0
                     else:
+                        next_value = values_tensor[i + 1].item()
+                        next_advantage = advantages_tensor[i + 1].item()
 
-                        # Temporal difference estimate of the advantage
-                        advantage_td_estimate = (
-                            rewards_tensor[i]
-                            + self.gamma * values_tensor[i + 1]
-                            - values_tensor[i]
-                        )
+                    # Temporal difference estimate of the advantage
+                    advantage_td_estimate = (
+                        rewards_tensor[i] + self.gamma * next_value - values_tensor[i]
+                    )
 
-                        # Recursive application of lambda and gamma
-                        advantages_tensor[i] = (
-                            advantage_td_estimate
-                            + self.gamma * self.gae_lambda * advantages_tensor[i + 1]
-                        )
+                    # Recursive application of lambda and gamma
+                    advantages_tensor[i] = (
+                        advantage_td_estimate
+                        + self.gamma * self.gae_lambda * next_advantage
+                    )
 
                 # remove dummy advantage
                 advantages_tensor = advantages_tensor[:-1]

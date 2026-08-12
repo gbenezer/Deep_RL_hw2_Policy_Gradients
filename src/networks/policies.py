@@ -1,13 +1,11 @@
 import itertools
-from torch import nn
-import torch.distributions as D
-from torch import optim
 from typing import Dict
-from torch.types import Number
 
-import numpy as np
-from numpy.typing import NDArray
 import torch
+import torch.distributions as D
+from numpy.typing import NDArray
+from torch import nn, optim
+from torch.types import Number
 
 from infrastructure import pytorch_util as ptu
 
@@ -40,7 +38,6 @@ class MLPPolicy(nn.Module):
             ).to(ptu.device)
             parameters = self.net.parameters()
         else:
-
             # neural network with Gaussian/Normal action distribution means as output
             self.net = ptu.build_mlp(
                 input_size=ob_dim,
@@ -71,7 +68,7 @@ class MLPPolicy(nn.Module):
         obs_tensor = torch.as_tensor(obs, dtype=torch.float32, device=ptu.device)
 
         # get the Distribution output of the network
-        action_distribution: D.Distribution = self.forward(obs=obs_tensor)
+        action_distribution: D.Distribution = self(obs_tensor)
 
         # sample a tensor from the output action distribution
         action_tensor = action_distribution.sample()
@@ -111,18 +108,18 @@ class MLPPolicyPG(MLPPolicy):
     ) -> Dict[str, Number]:
         """Implements the policy gradient actor update."""
         obs_tensor = torch.from_numpy(obs).float().to(ptu.device)
-        actions_tensor = torch.from_numpy(actions).to(ptu.device)
+        actions_tensor = torch.from_numpy(actions).long().to(ptu.device)
         advantages_tensor = torch.from_numpy(advantages).float().to(ptu.device)
 
         # first get the actor action policy distribution
-        observation_action_distribution = self.forward(obs=obs_tensor)
+        observation_action_distribution = self(obs_tensor)
 
         # then get the negative log probability mass / density of the executed actions
         # under the observation action distribution (all positive numbers)
         negative_log_prob_actions = -1.0 * observation_action_distribution.log_prob(
             value=actions_tensor
         )
-        
+
         # if the action space is not discrete, sum the pdf
         # across all dimensions of the action space
         if not self.discrete:
